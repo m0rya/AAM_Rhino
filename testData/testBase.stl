@@ -1,0 +1,114 @@
+solid OBJECT
+  facet normal -0 -0 -1
+    outer loop
+      vertex 20 -10 2.5999999046325684
+      vertex -20 -10 2.5999999046325684
+      vertex -20 10 2.5999999046325684
+    endloop
+  endfacet
+  facet normal -0 -0 -1
+    outer loop
+      vertex 20 -10 2.5999999046325684
+      vertex -20 10 2.5999999046325684
+      vertex 20 10 2.5999999046325684
+    endloop
+  endfacet
+  facet normal -1 -0 0
+    outer loop
+      vertex -20 -10 2.5999999046325684
+      vertex -20 -10 22.600000381469727
+      vertex -20 10 22.600000381469727
+    endloop
+  endfacet
+  facet normal -1 -0 0
+    outer loop
+      vertex -20 -10 2.5999999046325684
+      vertex -20 10 22.600000381469727
+      vertex -20 10 2.5999999046325684
+    endloop
+  endfacet
+  facet normal -0.48694711692575499 -0 0.87343145427543145
+    outer loop
+      vertex -20 -10 22.600000381469727
+      vertex -0.21072207391262054 -10 33.632728576660156
+      vertex -0.21072207391262054 10 33.632728576660156
+    endloop
+  endfacet
+  facet normal -0.48694711692575499 0 0.87343145427543145
+    outer loop
+      vertex -20 -10 22.600000381469727
+      vertex -0.21072207391262054 10 33.632728576660156
+      vertex -20 10 22.600000381469727
+    endloop
+  endfacet
+  facet normal 0.47914323385160162 -0 0.87773672673201342
+    outer loop
+      vertex -0.21072207391262054 -10 33.632728576660156
+      vertex 20 -10 22.600000381469727
+      vertex 20 10 22.600000381469727
+    endloop
+  endfacet
+  facet normal 0.47914323385160162 0 0.87773672673201342
+    outer loop
+      vertex -0.21072207391262054 -10 33.632728576660156
+      vertex 20 10 22.600000381469727
+      vertex -0.21072207391262054 10 33.632728576660156
+    endloop
+  endfacet
+  facet normal 1 0 0
+    outer loop
+      vertex 20 -10 22.600000381469727
+      vertex 20 -10 2.5999999046325684
+      vertex 20 10 2.5999999046325684
+    endloop
+  endfacet
+  facet normal 1 0 0
+    outer loop
+      vertex 20 -10 22.600000381469727
+      vertex 20 10 2.5999999046325684
+      vertex 20 10 22.600000381469727
+    endloop
+  endfacet
+  facet normal -0 -1 0
+    outer loop
+      vertex -0.21072207391262054 -10 33.632728576660156
+      vertex -20 -10 22.600000381469727
+      vertex -20 -10 2.5999999046325684
+    endloop
+  endfacet
+  facet normal 0 -1 0
+    outer loop
+      vertex 20 -10 2.5999999046325684
+      vertex 20 -10 22.600000381469727
+      vertex -0.21072207391262054 -10 33.632728576660156
+    endloop
+  endfacet
+  facet normal 0 -1 -0
+    outer loop
+      vertex -20 -10 2.5999999046325684
+      vertex 20 -10 2.5999999046325684
+      vertex -0.21072207391262054 -10 33.632728576660156
+    endloop
+  endfacet
+  facet normal -0 1 0
+    outer loop
+      vertex -0.21072207391262054 10 33.632728576660156
+      vertex -20 10 2.5999999046325684
+      vertex -20 10 22.600000381469727
+    endloop
+  endfacet
+  facet normal 0 1 0
+    outer loop
+      vertex 20 10 2.5999999046325684
+      vertex -0.21072207391262054 10 33.632728576660156
+      vertex 20 10 22.600000381469727
+    endloop
+  endfacet
+  facet normal 0 1 -0
+    outer loop
+      vertex -20 10 2.5999999046325684
+      vertex -0.21072207391262054 10 33.632728576660156
+      vertex 20 10 2.5999999046325684
+    endloop
+  endfacet
+endsolid OBJECT
