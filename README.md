@@ -2,6 +2,9 @@
 
 ## How to Install Command
 
+
+### for Mac Os
+
 1.Download from Github
 ```
 $ git clone https://github.com/m0rya/AAM_Rhino.git
