@@ -48,7 +48,7 @@ def main():
         pluginFolderName = 'AAMPlugins{' + u1 + '}'
 
         subprocess.call(['mkdir', locate + 'PythonPlugins/' + pluginFolderName])
-        surprocess.call(['mkdir', locate + 'PythonPlugins/' + pluginFolderName + '/dev'])
+        subprocess.call(['mkdir', locate + 'PythonPlugins/' + pluginFolderName + '/dev'])
 
 
     subprocess.call(['cp', "../src/AAM_Planar_cmd.py", locate + 'PythonPlugins/' + pluginFolderName + '/dev/'])
