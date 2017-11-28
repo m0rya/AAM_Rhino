@@ -9,10 +9,23 @@ __commandname__ = "AAM_Planar"
 """
 To do
 
+#important
+delete fuckin lines
+
+#important
+adapt to curved surface
+
+#important
+middle surface
+
+move to first point safely
+
+
+
+
 warning for angle of baseSurface
 
 Printing Speed!!!!
-
 
 get variables of print setting
 3d printing setting file by xml
@@ -248,7 +261,7 @@ class AAM_Planar():
 
             gotAngle = rs.VectorAngle(tmpNormal, self.normalVec)
             if gotAngle == 0 or gotAngle == 180:
-            
+
                 tmpPoints = rs.SurfaceEditPoints(surface)
                 tmpPlane = rs.PlaneFromNormal(tmpPoints[0], self.normalVec)
 
@@ -269,6 +282,8 @@ class AAM_Planar():
                 self.indexParalellSurfaces.append(int(distance))
                 #there is object to delete
                 self.paralellIntersectedCurves.append(rs.JoinCurves(rs.DuplicateEdgeCurves(surface)))
+
+        rs.DeleteObjects(explodedSurfaces)
 
         #debug
         print('detect Paralell')
@@ -377,8 +392,8 @@ class AAM_Planar():
             if slicedCurves == None:
                 print('slicing done')
                 self.gcoder.finishGcode()
-                fileN = rs.SaveFileName("Output file", "G-Code Files (*.gcode)|*.gcode|All Files (*.*)|*.*|", None, self.fileName)
-                self.gcoder.outputFile()
+                fileN = rs.SaveFileName("Output file", "G-Code Files (*.gcode)|*.gcode|All Files (*.*)|*.*|", None, None)
+                self.gcoder.outputFile(fileN)
 
                 return
 
@@ -491,13 +506,17 @@ class AAM_Planar():
 
                 if layer < (self.gcoder.getNumBottomLayer()):
                     self.setLayerFill(vec, newOffsetCurve, layer)
+                    rs.DeleteObject(newOffsetCurve)
 
                 elif layer > (int(self.distancePrinting/multiplier) - self.gcoder.getNumTopLayer()):
 
                     self.setLayerFill(vec, newOffsetCurve, layer)
+                    rs.DeleteObject(newOffsetCurve)
 
                 else:
                     self.setInfill(vec, newOffsetCurve)
+                    if rs.IsObject(newOffsetCurve):
+                        rs.DeleteObject(newOffsetCurve)
 
 
                 #rs.DeleteObjects(newOffsetCurve)
@@ -567,6 +586,7 @@ class AAM_Planar():
 
             if intersectedPoint == None:
                 #print('intersectedPoint is none')
+                rs.DeleteObject(baseLine)
                 rs.DeleteObject(nextLine)
                 rs.DeleteObject(newSliceSurface)
                 continue
@@ -673,6 +693,7 @@ class AAM_Planar():
 
             if intersectedPoint == None:
                 rs.DeleteObject(nextLine)
+                rs.DeleteObject(baseLine)
                 continue
 
             intersectedPoint = [n[1] for n in intersectedPoint]
@@ -771,6 +792,7 @@ class AAM_Planar():
             if intersectedPoint == None:
                 #print('intersectedPoint is none')
                 rs.DeleteObject(nextLine)
+                rs.DeleteObject(baseLine)
                 continue
 
             intersectedPoint = [n[1] for n in intersectedPoint]
@@ -1099,10 +1121,10 @@ def main():
     aam = AAM_Planar(gcoder)
     aam.main()
 
-'''
 def RunCommand(is_interactive):
     main()
-'''
 
+'''
 if __name__ == "__main__":
     main()
+'''
