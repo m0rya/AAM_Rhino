@@ -80,8 +80,6 @@ class AAM_Planar():
 
 
         self.detectParalellSurface()
-        print('#debug : detectParalellSurface() is done')
-
 
         #set layer for sliced lines
         '''
@@ -93,6 +91,7 @@ class AAM_Planar():
 
         #self.setLayerFill()
         self.slice()
+        print('slicing done')
 
         self.clean()
 
@@ -409,6 +408,7 @@ class AAM_Planar():
 
             rs.DeleteObjects(slicedCurves)
 
+        print('slicing done')
         self.gcoder.finishGcode()
         fileN = rs.SaveFileName("Output file", "G-Code Files (*.gcode)|*.gcode|All Files (*.*)|*.*|")
         self.gcoder.outputFile(fileN)
@@ -515,7 +515,7 @@ class AAM_Planar():
 
                 else:
                     self.setInfill(vec, newOffsetCurve)
-                    if rs.IsObject(newOffsetCurve):
+                    if newOffsetCurve is not None:
                         rs.DeleteObject(newOffsetCurve)
 
 
@@ -673,13 +673,9 @@ class AAM_Planar():
             nextLine = rs.AddLine(nextStartPoint, nextEndPoint)
 
             if nextLine == None or intersectCurve == None:
-                '''
-                print("hogehoge")
-                print('nextLine')
-                print(nextLine)
-                print('intersectCurve')
-                print(intersectCurve)
-                '''
+                rs.DeleteObject(nextLine)
+                rs.DeleteObject(baseLine)
+
                 continue
             try:
                 intersectedPoint  = rs.CurveCurveIntersection(nextLine, intersectCurve)
@@ -701,7 +697,7 @@ class AAM_Planar():
 
 
             if intersectedPoint == None:
-                print('there is no intersectedPoint')
+                #print('there is no intersectedPoint')
                 rs.DeleteObject(nextLine)
                 rs.DeleteObject(intersectedPoint)
                 continue
@@ -786,6 +782,8 @@ class AAM_Planar():
 
             if nextLine == None or intersectCurve == None:
                 #print("hogehoge")
+                rs.DeleteObject(baseLine)
+                rs.DeleteObject(nextLine)
                 continue
 
             intersectedPoint  = rs.CurveCurveIntersection(nextLine, intersectCurve)
@@ -1121,10 +1119,10 @@ def main():
     aam = AAM_Planar(gcoder)
     aam.main()
 
+'''
 def RunCommand(is_interactive):
     main()
-
 '''
+
 if __name__ == "__main__":
     main()
-'''
