@@ -270,8 +270,6 @@ class AAM_Planar():
                 distance *= (1.0 / math.cos(math.radians(self.angleOfSurface)))
 
                 distance /= self.multiplier
-                print(self.multiplier)
-                print(distance)
                 if distance < 0:
                     distance *= -1
 
@@ -284,10 +282,6 @@ class AAM_Planar():
 
         rs.DeleteObjects(explodedSurfaces)
 
-        #debug
-        print('detect Paralell')
-        print('index')
-        print(self.indexParalellSurfaces)
 
     '''
     filter 1 => cut outside of cutter
@@ -363,13 +357,9 @@ class AAM_Planar():
 
 
 
-        print('multiplier')
-        print(multiplier)
 
         #layer by layer
         layer = 0
-        print('num layer')
-        print(int(self.distancePrinting/multiplier)+1)
 
         for layer in range(int(self.distancePrinting/multiplier)+1):
         #while(True):
@@ -404,7 +394,7 @@ class AAM_Planar():
                 self.makeGcodeFromSlicedCurve(slicedCurve, layer, nextVec, multiplier)
 
 
-            layer += 1
+            #layer += 1
 
             rs.DeleteObjects(slicedCurves)
 
@@ -424,6 +414,7 @@ class AAM_Planar():
 
         tmpText = ""
 
+        """
         editPointsOfIntersectCurve = rs.CurveEditPoints(slicedCurve)
 
         dirVec = [0,0,0]
@@ -433,6 +424,10 @@ class AAM_Planar():
             dirVec[2] += l[2]
 
         dirVec = [i/len(editPointsOfIntersectCurve) for i in dirVec]
+        """
+
+        dirVec = rs.CurveAreaCentroid(slicedCurve)
+        dirVec = dirVec[0]
 
         #shell by shell
         for shell in range(self.gcoder.getNumShellOutline()):
@@ -498,9 +493,10 @@ class AAM_Planar():
                         rs.SelectObject(offsetParalell)
                         rs.Command('Move')
 
+                        #it needs to debug, it's close
                         self.setLayerFill(vec, offsetParalell, layer)
 
-                        self.setInfill(vec, newOffsetCurve, offsetParalell)
+                        #self.setInfill(vec, newOffsetCurve, offsetParalell)
 
 
 
@@ -531,6 +527,7 @@ class AAM_Planar():
     def setLayerFill(self, vec, intersectCurve, index):
 
         #set baseline, baseVec, dist
+
         newSliceSurface = rs.CopyObject(self.sliceSurface, vec)
         editPoints = rs.SurfaceEditPoints(newSliceSurface)
 
