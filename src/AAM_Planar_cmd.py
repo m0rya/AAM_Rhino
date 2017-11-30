@@ -48,6 +48,7 @@ class AAM_Planar():
 
         #sliceSurface is used for slicing addtiveObj
         self.sliceSurface = None
+        self.fixedLayerHeight = None
 
         self.prePoint = None
         self.angleOfBaseSurface = None
@@ -75,6 +76,7 @@ class AAM_Planar():
 
         self.setSurfaceForSlicing()
 
+
         #setter
         self.setPrintingSetting()
 
@@ -94,6 +96,7 @@ class AAM_Planar():
         print('slicing done')
 
         self.clean()
+
 
 
     def setAngleOfBaseSurface(self):
@@ -153,6 +156,30 @@ class AAM_Planar():
 
 
 
+    #calculate distance from bottom to top
+    def calcDistance(self, plane, editPoints):
+        forDistance = []
+
+        for i in range(len(editPoints)):
+            if i == 0:
+                forDistance.append(editPoints[0])
+                forDistance.append(rs.DistanceToPlane(plane, editPoints[0]))
+            else:
+                tmpDistance = rs.DistanceToPlane(plane, editPoints[i])
+                if tmpDistance > forDistance[1]:
+                    forDistance[0] = editPoints[i]
+                    forDistance[1] = tmpDistance
+
+        self.distancePrinting = rs.DistanceToPlane(plane, forDistance[0])
+
+        #adapt to Z Axis
+        self.distancePrinting *= (1.0 / math.cos(math.radians(self.angleOfSurface)))
+
+        if self.distancePrinting < 0:
+            self.distancePrinting *= -1
+
+        return
+
     def setSurfaceForSlicing(self):
         explodedSurfaces = None
 
@@ -160,10 +187,9 @@ class AAM_Planar():
         explodedSurfaces = rs.ExplodePolysurfaces(self.addtiveObj)
         for i in explodedSurfaces:
             tmp = rs.SurfaceEditPoints(i)
-            for j in tmp:
-                editPoint.append(j)
+            editPoint.extend(tmp)
 
-        rs.CullDuplicatePoints(editPoint)
+        #rs.CullDuplicatePoints(editPoint)
 
 
         minValue = []
@@ -200,26 +226,9 @@ class AAM_Planar():
 
 
         #calculating distance printing
-        forDistance = []
-        for i in range(len(editPoint)):
-            if i == 0:
-                forDistance.append(editPoint[0])
-                forDistance.append(rs.DistanceToPlane(plane, editPoint[0]))
-            else:
-                tmpDistance = rs.DistanceToPlane(plane, editPoint[i])
-                if tmpDistance > forDistance[1]:
-                    forDistance[0] = editPoint[i]
-                    forDistance[1] = tmpDistance
+        self.calcDistance(plane, editPoint)
 
-        self.distancePrinting = rs.DistanceToPlane(plane, forDistance[0])
-        #adapt to Z Axis
-        self.distancePrinting *= (1.0 / math.cos(math.radians(self.angleOfSurface)))
-
-        if self.distancePrinting < 0:
-            self.distancePrinting *= -1
-
-        plane = rs.PlaneFromNormal(basePointForPlane, self.normalVec)
-
+        #make base surface
         pntForSur = []
         line = (minValue[0], minValue[1], minValue[2]), (minValue[0], minValue[1], maxValue[2])
         pntForSur.append(rs.LinePlaneIntersection(line, plane))
@@ -237,6 +246,9 @@ class AAM_Planar():
 
         self.sliceSurface = rs.AddEdgeSrf(lineForSur)
 
+        self.fixedLayerHeight = float(self.gcoder.getLayerHeight() * (1.0 / math.cos(math.radians(self.angleOfSurface))))
+
+        self.sliceSurface = rs.MoveObject(self.sliceSurface, (0, 0, self.fixedLayerHeight*0.9))
 
 
         #Delete lines used for making sliceSurface
@@ -246,8 +258,8 @@ class AAM_Planar():
 
 
     def detectParalellSurface(self):
-        #set multiplier
-        self.multiplier = float(self.gcoder.getLayerHeight() * (1.0 / math.cos(math.radians(self.angleOfSurface))))
+        #fix layer height
+
 
         #self.paralellIntersectedCurve
         #self.indexParalellSurfaces
@@ -269,11 +281,11 @@ class AAM_Planar():
 
                 distance *= (1.0 / math.cos(math.radians(self.angleOfSurface)))
 
-                distance /= self.multiplier
+                distance /= self.fixedLayerHeight
                 if distance < 0:
                     distance *= -1
 
-                if int(distance) == int(self.distancePrinting/self.multiplier) or int(distance) == 0:
+                if int(distance) == int(self.distancePrinting/self.fixedLayerHeight) or int(distance) == 0:
                     continue
 
                 self.indexParalellSurfaces.append(int(distance))
@@ -351,18 +363,14 @@ class AAM_Planar():
         self.gcoder.initGcode()
 
         tmpText = ""
-        #maybe bug
-        #multiplier = float(self.gcoder.getLayerHeight() * math.cos(math.radians(self.angleOfSurface)))
-        multiplier = float(self.gcoder.getLayerHeight() * (1.0 / math.cos(math.radians(self.angleOfSurface))))
-
 
 
 
         #layer by layer
         layer = 0
 
-        for layer in range(int(self.distancePrinting/multiplier)+1):
-        #while(True):
+        for layer in range(int(self.distancePrinting/self.fixedLayerHeight)+1):
+
 
             tmpText = "; layer " + str(layer) + "\n"
             #init evalue
@@ -370,7 +378,7 @@ class AAM_Planar():
             self.gcoder.addGcode(tmpText)
             self.gcoder.initEValue()
 
-            nextVec = (0, 0, float(multiplier*layer))
+            nextVec = (0, 0, float(self.fixedLayerHeight*layer))
             slicer = rs.CopyObject(self.sliceSurface, nextVec)
 
             slicedCurves = rs.IntersectBreps(self.addtiveObj, slicer)
@@ -386,17 +394,15 @@ class AAM_Planar():
 
                 return
 
+
             #slicedCurve one by one
-
-
             for slicedCurve in slicedCurves:
 
-                self.makeGcodeFromSlicedCurve(slicedCurve, layer, nextVec, multiplier)
+                self.makeGcodeFromSlicedCurve(slicedCurve, layer)
 
-
-            #layer += 1
 
             rs.DeleteObjects(slicedCurves)
+
 
         print('slicing done')
         self.gcoder.finishGcode()
@@ -409,7 +415,7 @@ class AAM_Planar():
 
 
 
-    def makeGcodeFromSlicedCurve(self, slicedCurve, layer, vec, multiplier):
+    def makeGcodeFromSlicedCurve(self, slicedCurve, layer):
         deleteItem = []
 
         tmpText = ""
@@ -429,13 +435,17 @@ class AAM_Planar():
         dirVec = rs.CurveAreaCentroid(slicedCurve)
         dirVec = dirVec[0]
 
+
         #shell by shell
         for shell in range(self.gcoder.getNumShellOutline()):
 
+            nozzleDia = self.gcoder.getExtruderDiameter()
+
             if shell == 0:
-                offsetCurve = rs.CopyObject(slicedCurve)
+                offsetCurve = rs.OffsetCurve(slicedCurve, tuple(dirVec), nozzleDia/2.0)
             else:
-                offsetCurve = rs.OffsetCurve(slicedCurve, tuple(dirVec), self.gcoder.getLayerHeight() * shell)
+                #offsetCurve = rs.OffsetCurve(slicedCurve, tuple(dirVec), self.gcoder.getLayerHeight() * shell)
+                offsetCurve = rs.OffsetCurve(slicedCurve, tuple(dirVec), nozzleDia/2.0 + nozzleDia*shell)
 
             #if offsetCurve == None or isinstance(offsetCurve, list) or not rs.IsCurveClosed(offsetCurve):
             #if offsetCurve == None or isinstance(offsetCurve, list):
@@ -446,6 +456,7 @@ class AAM_Planar():
             if isinstance(offsetCurve, list) and len(offsetCurve) > 1:
                 rs.DeleteObjects(offsetCurve)
                 continue
+
 
             explodedCurve = rs.ExplodeCurves(offsetCurve)
 
@@ -477,12 +488,14 @@ class AAM_Planar():
 
             if shell == (self.gcoder.getNumShellOutline()-1):
 
-                newOffsetCurve = rs.OffsetCurve(offsetCurve, tuple(dirVec), self.gcoder.getLayerHeight())
+                #newOffsetCurve = rs.OffsetCurve(offsetCurve, tuple(dirVec), self.gcoder.getLayerHeight())
+                offsetCurveForFill = rs.OffsetCurve(offsetCurve, tuple(dirVec), nozzleDia)
 
-                if isinstance(newOffsetCurve, list) and len(newOffsetCurve) > 1:
+                #detect failed to offset
+                if isinstance(offsetCurveForFill, list) and len(offsetCurveForFill) > 1:
                     continue
 
-
+                '''
                 for paralellLayer in range(len(self.paralellIntersectedCurves)):
                     if layer > self.indexParalellSurfaces[paralellLayer] and abs(layer-self.indexParalellSurfaces[paralellLayer]) < self.gcoder.getNumTopLayer():
                         offsetParalell = rs.OffsetCurve(self.paralellIntersectedCurves[paralellLayer], tuple(dirVec), self.gcoder.getLayerHeight()*self.gcoder.getNumShellOutline())
@@ -497,22 +510,24 @@ class AAM_Planar():
                         self.setLayerFill(vec, offsetParalell, layer)
 
                         #self.setInfill(vec, newOffsetCurve, offsetParalell)
+                '''
 
 
 
                 if layer < (self.gcoder.getNumBottomLayer()):
-                    self.setLayerFill(vec, newOffsetCurve, layer)
-                    rs.DeleteObject(newOffsetCurve)
+                    self.setLayerFill(offsetCurveForFill, layer)
+                    rs.DeleteObject(offsetCurveForFill)
 
-                elif layer > (int(self.distancePrinting/multiplier) - self.gcoder.getNumTopLayer()):
+                elif layer > (int(self.distancePrinting/self.fixedLayerHeight) - self.gcoder.getNumTopLayer()):
 
-                    self.setLayerFill(vec, newOffsetCurve, layer)
-                    rs.DeleteObject(newOffsetCurve)
+                    self.setLayerFill(offsetCurveForFill, layer)
+                    rs.DeleteObject(offsetCurveForFill)
 
                 else:
-                    self.setInfill(vec, newOffsetCurve)
-                    if newOffsetCurve is not None:
-                        rs.DeleteObject(newOffsetCurve)
+                    self.setInfill(offsetCurveForFill, layer)
+                    if offsetCurveForFill is not None:
+                        rs.DeleteObject(offsetCurveForFill)
+
 
 
                 #rs.DeleteObjects(newOffsetCurve)
@@ -524,11 +539,11 @@ class AAM_Planar():
 
 
 
-    def setLayerFill(self, vec, intersectCurve, index):
+    def setLayerFill(self, intersectCurve, index):
 
         #set baseline, baseVec, dist
 
-        newSliceSurface = rs.CopyObject(self.sliceSurface, vec)
+        newSliceSurface = rs.CopyObject(self.sliceSurface, (0, 0, float(self.fixedLayerHeight*index)))
         editPoints = rs.SurfaceEditPoints(newSliceSurface)
 
         #vertical
@@ -545,6 +560,7 @@ class AAM_Planar():
             baseVec = (editPoints[1][0]-editPoints[0][0], editPoints[1][1]-editPoints[0][1], editPoints[1][2]-editPoints[0][2])
             dist = rs.Distance(editPoints[0], editPoints[1])
 
+
         #normalize baseVec
         forNormal = math.sqrt(baseVec[0]**2 + baseVec[1]**2 + baseVec[2]**2)
         baseVec = [i/forNormal for i in baseVec]
@@ -553,10 +569,10 @@ class AAM_Planar():
 
         self.gcoder.addGcode("; layer filling\n")
 
-        for i in range(int(dist/self.gcoder.getLayerHeight())+1):
+        for i in range(int(dist/self.gcoder.getExtruderDiameter())+1):
             lines = []
 
-            nextVec = [v*self.gcoder.getLayerHeight()*i for v in baseVec]
+            nextVec = [v*self.gcoder.getExtruderDiameter()*i for v in baseVec]
 
             #vertical
             if index%2 == 0:
@@ -569,58 +585,38 @@ class AAM_Planar():
 
             #nextLine = (nextStartPoint), (nextEndPoint)
             nextLine = rs.AddLine(nextStartPoint, nextEndPoint)
-            try:
-                intersectedPoint = rs.CurveCurveIntersection(nextLine, intersectCurve[0])
-            except:
-                print("intersect failur")
 
-                print('nextLine')
-                print(nextLine)
-                print('intersectCurve')
-                print(intersectCurve)
-                print(intersectCurve[0])
+            lines = self.trim(nextLine, intersectCurve[0], 1)
 
-
-            if intersectedPoint == None:
-                #print('intersectedPoint is none')
-                rs.DeleteObject(baseLine)
-                rs.DeleteObject(nextLine)
-                rs.DeleteObject(newSliceSurface)
-                continue
-
-            intersectedPoint = [n[1] for n in intersectedPoint]
-
-
-
-            if len(intersectedPoint)%2 == 0:
-                for j in range(int(len(intersectedPoint)/2)):
-                    if i%2 == 0:
-                        lines.append(rs.AddLine(intersectedPoint[2*j], intersectedPoint[(2*j)+1]))
-                    else:
-                        lines.append(rs.AddLine(intersectedPoint[2*int(len(intersectedPoint)/2-j)-1], intersectedPoint[2*int(len(intersectedPoint)/2-j)-2]))
-
-            elif len(intersectedPoint)%2 == 1:
-                #check there is no duplicate point with intersectCurve
-                #DEBUG needs
-                intersectedPoint = self.deleteAlonePoint(intersectedPoint, intersectCurve)
 
             rs.DeleteObject(nextLine)
+
+            if lines is None:
+                continue
+
+            if i%2 == 1:
+                lines.reverse()
 
             for j in lines:
                 startPoint = rs.CurveStartPoint(j)
                 endPoint = rs.CurveEndPoint(j)
 
-                #self.gcoder.calcEValue(startPoint, endPoint)
                 self.gcoder.calcEValue(rs.Distance(startPoint, endPoint))
 
-                tmpText = "G1 X" + str(startPoint[0]) + " Y" + str(startPoint[1]) + " Z" + str(startPoint[2]) + " F3600\n"
-                tmpText += "G1 X" + str(endPoint[0]) + " Y" + str(endPoint[1]) + " Z" + str(endPoint[2]) + " E" + str(self.gcoder.getEValue()) + " F1800\n"
+                if i%2 == 0:
+                    tmpText = "G1 X" + str(startPoint[0]) + " Y" + str(startPoint[1]) + " Z" + str(startPoint[2]) + " F3600\n"
+                    tmpText += "G1 X" + str(endPoint[0]) + " Y" + str(endPoint[1]) + " Z" + str(endPoint[2]) + " E" + str(self.gcoder.getEValue()) + " F1800\n"
+
+                elif i%2 == 1:
+                    tmpText = "G1 X" + str(endPoint[0]) + " Y" + str(endPoint[1]) + " Z" + str(endPoint[2]) + " F3600\n"
+                    tmpText += "G1 X" + str(startPoint[0]) + " Y" + str(startPoint[1]) + " Z" + str(startPoint[2]) + " E" + str(self.gcoder.getEValue()) + " F1800\n"
 
                 self.gcoder.addGcode(tmpText)
 
 
-            rs.DeleteObjects(lines)
 
+            rs.DeleteObjects(lines)
+        rs.DeleteObject(baseLine)
         rs.DeleteObject(newSliceSurface)
 
     def deleteAlonePoint(self, points, intersectCurve):
@@ -636,11 +632,14 @@ class AAM_Planar():
         return points
 
 
-    def setInfill(self, vec, intersectCurve, paralellOffset = None):
+    def setInfill(self, intersectCurve, index, paralellOffset = None):
         if self.gcoder.getInfillRatio() == 0:
             return
 
-        newSliceSurface = rs.CopyObject(self.sliceSurface, vec)
+        self.gcoder.addGcode("; layer infill\n")
+
+
+        newSliceSurface = rs.CopyObject(self.sliceSurface, (0, 0, float(self.fixedLayerHeight*index)))
         editPoints = rs.SurfaceEditPoints(newSliceSurface)
 
         rs.DeleteObject(newSliceSurface)
@@ -657,6 +656,7 @@ class AAM_Planar():
         lines = []
 
         #interval = self.gcoder.getLayerHeight() * (1.0 / self.gcoder.getInfillRatio())
+        #It needs to DEBUG
         interval = self.gcoder.getLayerHeight() * 30
 
         #prepare horizontal lines
@@ -674,45 +674,40 @@ class AAM_Planar():
                 rs.DeleteObject(baseLine)
 
                 continue
-            try:
-                intersectedPoint  = rs.CurveCurveIntersection(nextLine, intersectCurve)
-            except:
-                print('failed')
-                print('nextLine')
-                print(nextLine)
-                print('intersectCurve')
-                print(intersectCurve)
 
 
-            if intersectedPoint == None:
-                rs.DeleteObject(nextLine)
-                rs.DeleteObject(baseLine)
-                continue
-
-            intersectedPoint = [n[1] for n in intersectedPoint]
-
-
-
-            if intersectedPoint == None:
-                #print('there is no intersectedPoint')
-                rs.DeleteObject(nextLine)
-                rs.DeleteObject(intersectedPoint)
-                continue
-
-            if len(intersectedPoint)%2 == 0:
-                for j in range(int(len(intersectedPoint)/2)):
-                    if i%2 == 0:
-                        lines.append(rs.AddLine(intersectedPoint[2*j], intersectedPoint[(2*j)+1]))
-                    else:
-                        lines.append(rs.AddLine(intersectedPoint[2*int(len(intersectedPoint)/2-j)-1], intersectedPoint[2*int(len(intersectedPoint)/2-j)-2]))
-
-            elif len(intersectedPoint)%2 == 1:
-                #check there is no duplicate point with intersectCurve
-                #DEBUG needs
-                intersectedPoint = self.deleteAlonePoint(intersectedPoint, intersectCurve)
-
+            lines = (self.trim(nextLine, intersectCurve, 1))
             rs.DeleteObject(nextLine)
 
+            if lines is None:
+                continue
+
+            if i%2 == 1:
+                lines.reverse()
+
+            for j in lines:
+                startPoint = rs.CurveStartPoint(j)
+                endPoint = rs.CurveEndPoint(j)
+
+                self.gcoder.calcEValue(rs.Distance(startPoint, endPoint))
+
+                if i%2 == 0:
+                    tmpText = "G1 X" + str(startPoint[0]) + " Y" + str(startPoint[1]) + " Z" + str(startPoint[2]) + " F3600\n"
+                    tmpText += "G1 X" + str(endPoint[0]) + " Y" + str(endPoint[1]) + " Z" + str(endPoint[2]) + " E" + str(self.gcoder.getEValue()) + " F1800\n"
+
+                elif i%2 == 1:
+                    tmpText = "G1 X" + str(endPoint[0]) + " Y" + str(endPoint[1]) + " Z" + str(endPoint[2]) + " F3600\n"
+                    tmpText += "G1 X" + str(startPoint[0]) + " Y" + str(startPoint[1]) + " Z" + str(startPoint[2]) + " E" + str(self.gcoder.getEValue()) + " F1800\n"
+
+                self.gcoder.addGcode(tmpText)
+
+            rs.DeleteObjects(lines)
+        rs.DeleteObject(baseLine)
+
+
+
+
+        """
         '''
         in case there is paralell curve
         '''
@@ -726,30 +721,30 @@ class AAM_Planar():
                 for hoge in trimedLines:
                     newLines.append(hoge)
 
-
             lines = newLines
+        """
 
 
-
-        self.gcoder.addGcode("; layer infill\n")
+        """
 
         for i in range(len(lines)):
             startPoint = rs.CurveStartPoint(lines[i])
             endPoint = rs.CurveEndPoint(lines[i])
 
-            #self.gcoder.calcEValue(startPoint, endPoint)
             self.gcoder.calcEValue(rs.Distance(startPoint, endPoint))
 
+            if i%2 == 0:
+                tmpText = "G1 X" + str(startPoint[0]) + " Y" + str(startPoint[1]) + " Z" + str(startPoint[2]) + " F3600\n"
+                tmpText += "G1 X" + str(endPoint[0]) + " Y" + str(endPoint[1]) + " Z" + str(endPoint[2]) + " E" + str(self.gcoder.getEValue()) + " F1800\n"
 
-            #if i%2 == 0:
-            tmpText = "G1 X" + str(startPoint[0]) + " Y" + str(startPoint[1]) + " Z" + str(startPoint[2]) + " F3600\n"
-            tmpText += "G1 X" + str(endPoint[0]) + " Y" + str(endPoint[1]) + " Z" + str(endPoint[2]) + " E" + str(self.gcoder.getEValue()) + " F1800\n"
+            elif i%2 == 1:
+                tmpText = "G1 X" + str(endPoint[0]) + " Y" + str(endPoint[1]) + " Z" + str(endPoint[2]) + " F3600\n"
+                tmpText += "G1 X" + str(startPoint[0]) + " Y" + str(startPoint[1]) + " Z" + str(startPoint[2]) + " E" + str(self.gcoder.getEValue()) + " F1800\n"
+
 
 
             self.gcoder.addGcode(tmpText)
-
-        rs.DeleteObjects(lines)
-        #rs.DeleteObject(baseLine)
+        """
 
 
 
@@ -783,59 +778,36 @@ class AAM_Planar():
                 rs.DeleteObject(nextLine)
                 continue
 
-            intersectedPoint  = rs.CurveCurveIntersection(nextLine, intersectCurve)
-            if intersectedPoint == None:
-                #print('intersectedPoint is none')
-                rs.DeleteObject(nextLine)
-                rs.DeleteObject(baseLine)
-                continue
 
-            intersectedPoint = [n[1] for n in intersectedPoint]
-
-
-            if intersectedPoint == None:
-                print('there is no intersectedPoint')
-                rs.DeleteObject(nextLine)
-                rs.DeleteObject(intersectedPoint)
-                continue
-
-            if len(intersectedPoint)%2 == 0:
-                for j in range(int(len(intersectedPoint)/2)):
-                    if i%2 == 0:
-                        lines.append(rs.AddLine(intersectedPoint[2*j], intersectedPoint[(2*j)+1]))
-                    else:
-                        lines.append(rs.AddLine(intersectedPoint[2*int(len(intersectedPoint)/2-j)-1], intersectedPoint[2*int(len(intersectedPoint)/2-j)-2]))
-
-            elif len(intersectedPoint)%2 == 1:
-                #check there is no duplicate point with intersectCurve
-                #DEBUG needs
-                intersectedPoint = self.deleteAlonePoint(intersectedPoint, intersectCurve)
-
+            lines = (self.trim(nextLine, intersectCurve, 1))
             rs.DeleteObject(nextLine)
 
-        self.gcoder.addGcode("; layer infill\n")
+            if lines is None:
+                continue
 
-        for i in range(len(lines)):
-            startPoint = rs.CurveStartPoint(lines[i])
-            endPoint = rs.CurveEndPoint(lines[i])
+            if i%2 == 1:
+                lines.reverse()
 
-            #self.gcoder.calcEValue(startPoint, endPoint)
-            self.gcoder.calcEValue(rs.Distance(startPoint ,endPoint))
+            for j in lines:
+                startPoint = rs.CurveStartPoint(j)
+                endPoint = rs.CurveEndPoint(j)
 
-            #if i%2 == 0:
-            tmpText = "G1 X" + str(startPoint[0]) + " Y" + str(startPoint[1]) + " Z" + str(startPoint[2]) + " F3600\n"
-            tmpText += "G1 X" + str(endPoint[0]) + " Y" + str(endPoint[1]) + " Z" + str(endPoint[2]) + " E" + str(self.gcoder.getEValue()) + " F1800\n"
-            '''
-            else:
+                self.gcoder.calcEValue(rs.Distance(startPoint, endPoint))
 
-                tmpText += "G1 X" + str(endPoint[0]) + " Y" + str(endPoint[1]) + " Z" + str(endPoint[2]) + " F3600\n"
-                tmpText = "G1 X" + str(startPoint[0]) + " Y" + str(startPoint[1]) + " Z" + str(startPoint[2]) +" E" + str(self.gcoder.getEValue()) + " F1800\n"
-            '''
+                if i%2 == 0:
+                    tmpText = "G1 X" + str(startPoint[0]) + " Y" + str(startPoint[1]) + " Z" + str(startPoint[2]) + " F3600\n"
+                    tmpText += "G1 X" + str(endPoint[0]) + " Y" + str(endPoint[1]) + " Z" + str(endPoint[2]) + " E" + str(self.gcoder.getEValue()) + " F1800\n"
 
-            self.gcoder.addGcode(tmpText)
+                elif i%2 == 1:
+                    tmpText = "G1 X" + str(endPoint[0]) + " Y" + str(endPoint[1]) + " Z" + str(endPoint[2]) + " F3600\n"
+                    tmpText += "G1 X" + str(startPoint[0]) + " Y" + str(startPoint[1]) + " Z" + str(startPoint[2]) + " E" + str(self.gcoder.getEValue()) + " F1800\n"
 
-        rs.DeleteObjects(lines)
-        #rs.DeleteObject(baseLine)
+                self.gcoder.addGcode(tmpText)
+
+            rs.DeleteObjects(lines)
+
+
+        rs.DeleteObject(baseLine)
 
 
         return
@@ -1107,7 +1079,6 @@ class gcodeGenerater():
 main
 '''
 
-'''
 def main():
 
     gcoder = gcodeGenerater()
@@ -1116,10 +1087,12 @@ def main():
 
     aam = AAM_Planar(gcoder)
     aam.main()
-'''
+
 
 def RunCommand(is_interactive):
     main()
 
+'''
 if __name__ == "__main__":
     main()
+'''
