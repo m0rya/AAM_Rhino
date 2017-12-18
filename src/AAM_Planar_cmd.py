@@ -10,7 +10,6 @@ __commandname__ = "AAM_Planar"
 To do
 
 #important
-delete fuckin lines
 
 #important
 adapt to curved surface
@@ -106,7 +105,7 @@ class AAM_Planar():
 
         #for debug
         if self.angleOfSurface < 0 or self.angleOfSurface > 90:
-            print('self.angleOfSurface is weird')
+            print('self.angleOfSurface is wseird')
 
 
 
@@ -181,15 +180,25 @@ class AAM_Planar():
         return
 
     def setSurfaceForSlicing(self):
-        explodedSurfaces = None
 
-        editPoint = []
+
         explodedSurfaces = rs.ExplodePolysurfaces(self.addtiveObj)
-        for i in explodedSurfaces:
-            tmp = rs.SurfaceEditPoints(i)
-            editPoint.extend(tmp)
+        editPoint = []
 
-        #rs.CullDuplicatePoints(editPoint)
+        #get editPoint from polysurfaces
+        if len(explodedSurfaces) == 0:
+            #use obj
+            meshed = rhino.Geometry.Mesh.CreateFromBrep(rs.coercebrep(self.addtiveObj))
+            editPoint = rs.MeshVertices(meshed[0])
+
+        else:
+            for i in explodedSurfaces:
+                meshed = rhino.Geometry.Mesh.CreateFromBrep(rs.coercebrep(i))
+                vertices = rs.MeshVertices(meshed[0])
+                editPoint.extend(vertices)
+
+        rs.DeleteObjects(explodedSurfaces)
+
 
 
         minValue = []
@@ -244,16 +253,39 @@ class AAM_Planar():
         for i in range(4):
             lineForSur.append(rs.AddLine(pntForSur[i], pntForSur[(i+1)%4]))
 
-        self.sliceSurface = rs.AddEdgeSrf(lineForSur)
+
+
+        joinedCurve = rs.JoinCurves(lineForSur)
+        rs.DeleteObjects(lineForSur)
+
+        curveForSur = rs.OffsetCurve(joinedCurve, rs.CurveNormal(joinedCurve), 30)
+
+
+
+        self.sliceSurface = rs.AddPlanarSrf(curveForSur)
+
+        if len(curveForSur) > 1 or rs.IsPointOnSurface(self.sliceSurface, rs.CurveStartPoint(joinedCurve)) is False:
+
+            rs.DeleteObjects(curveForSur)
+            if self.sliceSurface is not None:
+                rs.DeleteObject(self.sliceSurface)
+
+            curveForSur = rs.OffsetCurve(joinedCurve, rs.CurveNormal(joinedCurve), -30)
+            self.sliceSurface = rs.AddPlanarSrf(curveForSur)
+        rs.DeleteObjects(joinedCurve)
+        rs.DeleteObjects(curveForSur)
+
+
+
 
         self.fixedLayerHeight = float(self.gcoder.getLayerHeight() * (1.0 / math.cos(math.radians(self.angleOfSurface))))
 
+        self.addtiveObj = rs.CopyObject(self.addtiveObj, (0, 0, self.fixedLayerHeight*0.9))
         self.sliceSurface = rs.MoveObject(self.sliceSurface, (0, 0, self.fixedLayerHeight*0.9))
 
 
+
         #Delete lines used for making sliceSurface
-        rs.DeleteObjects(lineForSur)
-        rs.DeleteObjects(explodedSurfaces)
 
 
 
@@ -280,19 +312,34 @@ class AAM_Planar():
 
 
                 distance *= (1.0 / math.cos(math.radians(self.angleOfSurface)))
+                print("distance")
+                print(distance)
 
-                distance /= self.fixedLayerHeight
-                if distance < 0:
-                    distance *= -1
+                paralellLayer = int(distance / self.fixedLayerHeight)
+                if paralellLayer < 0:
+                    paralellLayer *= -1
 
-                if int(distance) == int(self.distancePrinting/self.fixedLayerHeight) or int(distance) == 0:
+                if paralellLayer == int(self.distancePrinting/self.fixedLayerHeight) or int(distance) == 0:
                     continue
 
-                self.indexParalellSurfaces.append(int(distance))
+                self.indexParalellSurfaces.append(int(paralellLayer))
+                print("paralellLayer")
+                print(paralellLayer)
+                print("layer num")
+                print(self.distancePrinting/self.fixedLayerHeight)
                 #there is object to delete
                 self.paralellIntersectedCurves.append(rs.JoinCurves(rs.DuplicateEdgeCurves(surface)))
 
         rs.DeleteObjects(explodedSurfaces)
+
+        """
+        #debug
+        rs.UnselectAllObjects()
+        for i in self.paralellIntersectedCurves:
+            rs.SelectObject(i)
+
+        rs.Command("Move")
+        """
 
 
     '''
@@ -320,6 +367,8 @@ class AAM_Planar():
 
             mid = (x/2.0, y/2.0, z/2.0)
 
+            if tmpSurface is None:
+                continue
             if rs.IsPointOnSurface(tmpSurface, mid):
                 if filter == 1:
                     resultLines.append(rs.AddLine(intersectedPoints[i], intersectedPoints[i+1]))
@@ -334,7 +383,8 @@ class AAM_Planar():
 
 
         rs.DeleteObject(curve)
-        rs.DeleteObject(tmpSurface)
+        if tmpSurface is not None:
+            rs.DeleteObject(tmpSurface)
 
         return resultLines
 
@@ -360,11 +410,11 @@ class AAM_Planar():
         print("It may take a long time")
         deleteItem = []
 
-        self.gcoder.initGcode()
+        fileN = rs.SaveFileName("Output file", "G-Code Files (*.gcode)|*.gcode|All Files (*.*)|*.*|")
+
+        self.gcoder.initGcode(fileN)
 
         tmpText = ""
-
-
 
         #layer by layer
         layer = 0
@@ -385,7 +435,10 @@ class AAM_Planar():
             #deleteItem.append(slicedCurves)
 
             rs.DeleteObject(slicer)
+            if slicedCurves == None:
+                continue
 
+            '''
             if slicedCurves == None:
                 print('slicing done')
                 self.gcoder.finishGcode()
@@ -393,10 +446,16 @@ class AAM_Planar():
                 self.gcoder.outputFile(fileN)
 
                 return
+            '''
 
 
             #slicedCurve one by one
             for slicedCurve in slicedCurves:
+
+                if rs.IsCurve(slicedCurve) is False:
+                    continue
+                if slicedCurve is None:
+                    break
 
                 self.makeGcodeFromSlicedCurve(slicedCurve, layer)
 
@@ -406,8 +465,8 @@ class AAM_Planar():
 
         print('slicing done')
         self.gcoder.finishGcode()
-        fileN = rs.SaveFileName("Output file", "G-Code Files (*.gcode)|*.gcode|All Files (*.*)|*.*|")
-        self.gcoder.outputFile(fileN)
+        #fileN = rs.SaveFileName("Output file", "G-Code Files (*.gcode)|*.gcode|All Files (*.*)|*.*|")
+        self.gcoder.outputFile()
 
         return True
 
@@ -420,35 +479,54 @@ class AAM_Planar():
 
         tmpText = ""
 
-        """
-        editPointsOfIntersectCurve = rs.CurveEditPoints(slicedCurve)
+        #it may shit
+        if rs.IsCurveClosed(slicedCurve) is False:
 
-        dirVec = [0,0,0]
-        for l in editPointsOfIntersectCurve:
-            dirVec[0] += l[0]
-            dirVec[1] += l[1]
-            dirVec[2] += l[2]
+            #slicedCurve = rs.CloseCurve(slicedCurve)
+            startPoint = rs.CurveStartPoint(slicedCurve)
+            endPoint = rs.CurveEndPoint(slicedCurve)
 
-        dirVec = [i/len(editPointsOfIntersectCurve) for i in dirVec]
-        """
+            curveForFix = rs.AddCurve([startPoint, endPoint])
 
-        dirVec = rs.CurveAreaCentroid(slicedCurve)
-        dirVec = dirVec[0]
+            curves = []
+            curves.append(slicedCurve)
+            curves.append(curveForFix)
+            slicedCurve = rs.JoinCurves(curves)
+
+
+        #dirVec = rs.CurveNormal(slicedCurve)
+        dirVec = self.normalVec
 
 
         #shell by shell
+        #shell inside to outside
         for shell in range(self.gcoder.getNumShellOutline()):
 
             nozzleDia = self.gcoder.getExtruderDiameter()
 
+            '''
             if shell == 0:
                 offsetCurve = rs.OffsetCurve(slicedCurve, tuple(dirVec), nozzleDia/2.0)
             else:
                 #offsetCurve = rs.OffsetCurve(slicedCurve, tuple(dirVec), self.gcoder.getLayerHeight() * shell)
                 offsetCurve = rs.OffsetCurve(slicedCurve, tuple(dirVec), nozzleDia/2.0 + nozzleDia*shell)
+            '''
 
-            #if offsetCurve == None or isinstance(offsetCurve, list) or not rs.IsCurveClosed(offsetCurve):
-            #if offsetCurve == None or isinstance(offsetCurve, list):
+            if shell == self.gcoder.getNumShellOutline()-1:
+                ##offsetCurve = rs.OffsetCurve(slicedCurve, dirVec, -nozzleDia/2.0)
+                offsetCurve = rs.OffsetCurve(slicedCurve, dirVec, nozzleDia/2.0)
+
+            else:
+                try:
+                    ##offsetCurve = rs.OffsetCurve(slicedCurve, dirVec, -(nozzleDia/2.0 + nozzleDia*(self.gcoder.getNumShellOutline()-shell-1)))
+                    offsetCurve = rs.OffsetCurve(slicedCurve, dirVec, (nozzleDia/2.0 + nozzleDia*(self.gcoder.getNumShellOutline()-shell-1)))
+                except:
+                    print('offset failed\nslicedCurve')
+                    print(slicedCurve)
+                    print('dirVec')
+                    print(dirVec)
+
+            #skip, when offset fail
             if offsetCurve == None:
                 #print('failed to offset curve')
                 continue
@@ -458,59 +536,96 @@ class AAM_Planar():
                 continue
 
 
-            explodedCurve = rs.ExplodeCurves(offsetCurve)
+            #explodedCurve = rs.ExplodeCurves(offsetCurve)
 
 
             #lines from explodedCurve
             #from outline to gcode
+
+            #explodCurve is not enough
+            #you need to convert curve to polyline
+            #and then get point from editPoint
+
             prePoint = None
-            for line in range(len(explodedCurve)):
+            currentPoint = None
+            convertedPolyline = rs.ConvertCurveToPolyline(offsetCurve)
+            vertices = rs.CurveEditPoints(convertedPolyline)
+            rs.DeleteObject(convertedPolyline)
 
-                startPoint = rs.CurveStartPoint(explodedCurve[line])
-                endPoint = rs.CurveEndPoint(explodedCurve[line])
+            flag = True
 
-                if line == 0:
-                    tmpText = "G1 X" + str(startPoint[0]) + " Y" + str(startPoint[1]) + " Z" + str(startPoint[2]) + " F3600\n"
+            for ver in vertices:
 
-                #self.gcoder.calcEValue(startPoint, endPoint)
-                self.gcoder.calcEValue(rs.Distance(startPoint, endPoint))
-                tmpText += "G1 X" + str(endPoint[0]) + " Y" + str(endPoint[1]) + " Z" + str(endPoint[2]) + " E" + str(self.gcoder.getEValue()) + " F1800\n"
+                currentPoint = ver
+                if flag:
+                    tmpText = "G1 X{0} Y{1} Z{2} F{3}\n".format(currentPoint[0], currentPoint[1], currentPoint[2], 3600)
+                    flag = False
+                else:
+                    self.gcoder.calcEValue(rs.Distance(currentPoint, prePoint))
+                    tmpText = "G1 X{0} Y{1} Z{2} E{3} F{4}\n".format(currentPoint[0], currentPoint[1], currentPoint[2], self.gcoder.getEValue(), 1800)
+
+                prePoint = currentPoint
+
+                self.gcoder.addGcode(tmpText)
 
 
-
-            rs.DeleteObjects(explodedCurve)
-
-            self.gcoder.addGcode(tmpText)
-
+            #rs.DeleteObjects(explodedCurve)
 
             #from outline to fill gocde
             #if shell is last one, it needs to fill layer or infill
 
+            #inside to outside
             if shell == (self.gcoder.getNumShellOutline()-1):
+                rs.DeleteObject(offsetCurve)
+                ##offsetCurveForFill = rs.OffsetCurve(slicedCurve, dirVec, -(nozzleDia/2.0 + nozzleDia*(self.gcoder.getNumShellOutline())))
+                offsetCurveForFill = rs.OffsetCurve(slicedCurve, dirVec, (nozzleDia/2.0 + nozzleDia*(self.gcoder.getNumShellOutline())))
 
                 #newOffsetCurve = rs.OffsetCurve(offsetCurve, tuple(dirVec), self.gcoder.getLayerHeight())
+                if offsetCurveForFill == None:
+                    #print('failed to offset curve')
+                    break
+
+                if isinstance(offsetCurveForFill, list) and len(offsetCurveForFill) > 1:
+                    rs.DeleteObjects(offsetCurveForFill)
+                    break
+
+                '''
                 offsetCurveForFill = rs.OffsetCurve(offsetCurve, tuple(dirVec), nozzleDia)
 
                 #detect failed to offset
                 if isinstance(offsetCurveForFill, list) and len(offsetCurveForFill) > 1:
                     continue
-
                 '''
+
+                #fill for middle paralell layer
+
                 for paralellLayer in range(len(self.paralellIntersectedCurves)):
-                    if layer > self.indexParalellSurfaces[paralellLayer] and abs(layer-self.indexParalellSurfaces[paralellLayer]) < self.gcoder.getNumTopLayer():
-                        offsetParalell = rs.OffsetCurve(self.paralellIntersectedCurves[paralellLayer], tuple(dirVec), self.gcoder.getLayerHeight()*self.gcoder.getNumShellOutline())
+                    if layer >= self.indexParalellSurfaces[paralellLayer] and abs(layer-self.indexParalellSurfaces[paralellLayer]) < self.gcoder.getNumTopLayer():
+                        '''
+                        dirVecForParalell = rs.CurveAreaCentroid(self.paralellIntersectedCurves[paralellLayer])
+                        dirVecForParalell = dirVecForParalell[0]
+                        '''
+                        dirVecForParalell = rs.CurveNormal(self.paralellIntersectedCurves[paralellLayer])
+
+
+                        offsetParalell = rs.OffsetCurve(self.paralellIntersectedCurves[paralellLayer], dirVecForParalell, -(nozzleDia/2.0 + nozzleDia*(self.gcoder.getNumShellOutline())))
                         #debug
-                        print('layer')
-                        print(layer)
+
+                        '''
+                        #print('layer')
+                        #print(layer)
                         rs.UnselectAllObjects()
                         rs.SelectObject(offsetParalell)
                         rs.Command('Move')
+                        '''
+
 
                         #it needs to debug, it's close
-                        self.setLayerFill(vec, offsetParalell, layer)
+                        self.setLayerFill(offsetParalell, layer)
+                        continue
 
                         #self.setInfill(vec, newOffsetCurve, offsetParalell)
-                '''
+
 
 
 
@@ -532,11 +647,9 @@ class AAM_Planar():
 
                 #rs.DeleteObjects(newOffsetCurve)
 
-
+            #DEBUG
             rs.DeleteObjects(offsetCurve)
         rs.DeleteObject(slicedCurve)
-
-
 
 
     def setLayerFill(self, intersectCurve, index):
@@ -569,6 +682,7 @@ class AAM_Planar():
 
         self.gcoder.addGcode("; layer filling\n")
 
+        flag = False
         for i in range(int(dist/self.gcoder.getExtruderDiameter())+1):
             lines = []
 
@@ -583,13 +697,12 @@ class AAM_Planar():
                 nextStartPoint = (editPoints[0][0]+nextVec[0], editPoints[0][1]+nextVec[1], editPoints[0][2]+nextVec[2])
                 nextEndPoint = (editPoints[2][0]+nextVec[0], editPoints[2][1]+nextVec[1], editPoints[2][2]+nextVec[2])
 
-            #nextLine = (nextStartPoint), (nextEndPoint)
             nextLine = rs.AddLine(nextStartPoint, nextEndPoint)
 
             lines = self.trim(nextLine, intersectCurve[0], 1)
 
-
             rs.DeleteObject(nextLine)
+
 
             if lines is None:
                 continue
@@ -601,15 +714,37 @@ class AAM_Planar():
                 startPoint = rs.CurveStartPoint(j)
                 endPoint = rs.CurveEndPoint(j)
 
-                self.gcoder.calcEValue(rs.Distance(startPoint, endPoint))
-
                 if i%2 == 0:
-                    tmpText = "G1 X" + str(startPoint[0]) + " Y" + str(startPoint[1]) + " Z" + str(startPoint[2]) + " F3600\n"
-                    tmpText += "G1 X" + str(endPoint[0]) + " Y" + str(endPoint[1]) + " Z" + str(endPoint[2]) + " E" + str(self.gcoder.getEValue()) + " F1800\n"
+                    if flag:
+                        self.gcoder.calcEValue(rs.Distance(prePoint, startPoint))
+                        #tmpText = "G1 X{0} Y{1} Z{2} E{3} F{4}\n".format(startPoint[0], startPoint[1], startPoint[2], self.gcoder.getEValue(), 1800)
+                        tmpText = "G1 X{0} Y{1} Z{2} F{3}\n".format(startPoint[0], startPoint[1], startPoint[2], 1800)
+
+                    else:
+                        tmpText = "G1 X{0} Y{1} Z{2} F{3}\n".format(startPoint[0], startPoint[1], startPoint[2], 3600)
+                        flag = True
+
+                    self.gcoder.calcEValue(rs.Distance(startPoint, endPoint))
+                    tmpText += "G1 X{0} Y{1} Z{2} E{3} F{4}\n".format(endPoint[0], endPoint[1], endPoint[2], self.gcoder.getEValue(), 1800)
+
+                    prePoint = endPoint
 
                 elif i%2 == 1:
-                    tmpText = "G1 X" + str(endPoint[0]) + " Y" + str(endPoint[1]) + " Z" + str(endPoint[2]) + " F3600\n"
-                    tmpText += "G1 X" + str(startPoint[0]) + " Y" + str(startPoint[1]) + " Z" + str(startPoint[2]) + " E" + str(self.gcoder.getEValue()) + " F1800\n"
+
+                    if flag:
+                        self.gcoder.calcEValue(rs.Distance(prePoint, endPoint))
+
+                        #tmpText = "G1 X{0} Y{1} Z{2} E{3} F{4}\n".format(endPoint[0], endPoint[1], endPoint[2], self.gcoder.getEValue(), 1800)
+                        tmpText = "G1 X{0} Y{1} Z{2} F{3}\n".format(endPoint[0], endPoint[1], endPoint[2], 1800)
+                    else:
+
+                        tmpText = "G1 X{0} Y{1} Z{2} F{3}\n".format(endPoint[0], endPoint[1], endPoint[2], 3600)
+                        flag = True
+
+                    self.gcoder.calcEValue(rs.Distance(startPoint, endPoint))
+                    tmpText += "G1 X{0} Y{1} Z{2} E{3} F{4}\n".format(startPoint[0], startPoint[1], startPoint[2], self.gcoder.getEValue(), 1800)
+                    prePoint = startPoint
+
 
                 self.gcoder.addGcode(tmpText)
 
@@ -636,6 +771,8 @@ class AAM_Planar():
         if self.gcoder.getInfillRatio() == 0:
             return
 
+
+
         self.gcoder.addGcode("; layer infill\n")
 
 
@@ -655,11 +792,13 @@ class AAM_Planar():
 
         lines = []
 
-        #interval = self.gcoder.getLayerHeight() * (1.0 / self.gcoder.getInfillRatio())
+        interval = self.gcoder.getExtruderDiameter() * (1.0 / (self.gcoder.getInfillRatio() / 100.0))
         #It needs to DEBUG
-        interval = self.gcoder.getLayerHeight() * 30
+        #interval = self.gcoder.getLayerHeight() * 30
 
         #prepare horizontal lines
+
+        flag = False
 
         for i in range(int(dist/interval + 1)):
             nextVec = [j*(interval*i) for j in baseVec]
@@ -685,19 +824,46 @@ class AAM_Planar():
             if i%2 == 1:
                 lines.reverse()
 
+
             for j in lines:
                 startPoint = rs.CurveStartPoint(j)
                 endPoint = rs.CurveEndPoint(j)
 
-                self.gcoder.calcEValue(rs.Distance(startPoint, endPoint))
 
                 if i%2 == 0:
-                    tmpText = "G1 X" + str(startPoint[0]) + " Y" + str(startPoint[1]) + " Z" + str(startPoint[2]) + " F3600\n"
-                    tmpText += "G1 X" + str(endPoint[0]) + " Y" + str(endPoint[1]) + " Z" + str(endPoint[2]) + " E" + str(self.gcoder.getEValue()) + " F1800\n"
+                    if flag:
+                        self.gcoder.calcEValue(rs.Distance(prePoint, startPoint))
+
+                        #tmpText = "G1 X{0} Y{1} Z{2} E{3} F{4}\n".format(startPoint[0], startPoint[1], startPoint[2], self.gcoder.getEValue(), 1800)
+                        tmpText = "G1 X{0} Y{1} Z{2} F{3}\n".format(startPoint[0], startPoint[1], startPoint[2], 1800)
+                    else:
+                        tmpText = "G1 X{0} Y{1} Z{2} F{3}\n".format(startPoint[0], startPoint[1], startPoint[2], 3600)
+                        flag = True
+
+                    self.gcoder.calcEValue(rs.Distance(startPoint, endPoint))
+                    #tmpText += "G1 X" + str(endPoint[0]) + " Y" + str(endPoint[1]) + " Z" + str(endPoint[2]) + " E" + str(self.gcoder.getEValue()) + " F1800\n"
+                    tmpText += "G1 X{0} Y{1} Z{2} E{3} F{4}\n".format(endPoint[0], endPoint[1], endPoint[2], self.gcoder.getEValue(), 1800)
+                    prePoint = endPoint
+
+
 
                 elif i%2 == 1:
-                    tmpText = "G1 X" + str(endPoint[0]) + " Y" + str(endPoint[1]) + " Z" + str(endPoint[2]) + " F3600\n"
-                    tmpText += "G1 X" + str(startPoint[0]) + " Y" + str(startPoint[1]) + " Z" + str(startPoint[2]) + " E" + str(self.gcoder.getEValue()) + " F1800\n"
+                    if flag:
+                        self.gcoder.calcEValue(rs.Distance(prePoint, endPoint))
+
+                        #tmpText = "G1 X{0} Y{1} Z{2} E{3} F{4}\n".format(endPoint[0], endPoint[1], endPoint[2], self.gcoder.getEValue(), 1800)
+                        tmpText = "G1 X{0} Y{1} Z{2} F{3}\n".format(endPoint[0], endPoint[1], endPoint[2], 3600)
+                    else:
+                        tmpText = "G1 X{0} Y{1} Z{2} F{3}\n".format(endPoint[0], endPoint[1], endPoint[2], 3600)
+                        flag = True
+
+                    self.gcoder.calcEValue(rs.Distance(endPoint, startPoint))
+                    #tmpText += "G1 X" + str(startPoint[0]) + " Y" + str(startPoint[1]) + " Z" + str(startPoint[2]) + " E" + str(self.gcoder.getEValue()) + " F1800\n"
+                    tmpText += "G1 X{0} Y{1} Z{2} E{3} F{4}\n".format(startPoint[0], startPoint[1], startPoint[2], self.gcoder.getEValue(), 1800)
+
+                    prePoint = startPoint
+
+
 
                 self.gcoder.addGcode(tmpText)
 
@@ -763,6 +929,7 @@ class AAM_Planar():
 
         #interval = self.gcoder.getLayerHeight() * (1.0 / self.gcoder.getInfillRatio())
 
+        flag = False
         #prepare horizontal lines
         for i in range(int(dist/interval + 1)):
             nextVec = [j*(interval*i) for j in baseVec]
@@ -788,19 +955,41 @@ class AAM_Planar():
             if i%2 == 1:
                 lines.reverse()
 
+
+
             for j in lines:
                 startPoint = rs.CurveStartPoint(j)
                 endPoint = rs.CurveEndPoint(j)
 
-                self.gcoder.calcEValue(rs.Distance(startPoint, endPoint))
-
                 if i%2 == 0:
-                    tmpText = "G1 X" + str(startPoint[0]) + " Y" + str(startPoint[1]) + " Z" + str(startPoint[2]) + " F3600\n"
-                    tmpText += "G1 X" + str(endPoint[0]) + " Y" + str(endPoint[1]) + " Z" + str(endPoint[2]) + " E" + str(self.gcoder.getEValue()) + " F1800\n"
+                    if flag:
+                        self.gcoder.calcEValue(rs.Distance(prePoint, startPoint))
+                        tmpText = "G1 X{0} Y{1} Z{2} F{3}\n".format(startPoint[0], startPoint[1], startPoint[2], 3600)
+                    else:
+                        tmpText = "G1 X{0} Y{1} Z{2} F{3}\n".format(startPoint[0], startPoint[1], startPoint[2], 3600)
+
+                    self.gcoder.calcEValue(rs.Distance(startPoint, endPoint))
+                    tmpText += "G1 X{0} Y{1} Z{2} E{3} F{4}\n".format(endPoint[0], endPoint[1], endPoint[2], self.gcoder.getEValue(), 1800)
+                    prePoint = endPoint
+
+                    flag = True
+
 
                 elif i%2 == 1:
-                    tmpText = "G1 X" + str(endPoint[0]) + " Y" + str(endPoint[1]) + " Z" + str(endPoint[2]) + " F3600\n"
-                    tmpText += "G1 X" + str(startPoint[0]) + " Y" + str(startPoint[1]) + " Z" + str(startPoint[2]) + " E" + str(self.gcoder.getEValue()) + " F1800\n"
+                    if flag:
+                        self.gcoder.calcEValue(rs.Distance(prePoint, endPoint))
+
+                        tmpText = "G1 X{0} Y{1} Z{2} F{3}\n".format(endPoint[0], endPoint[1], endPoint[2], 1800)
+                    else:
+                        tmpText = "G1 X{0} Y{1} Z{2} F{3}\n".format(endPoint[0], endPoint[1], endPoint[2], 1800)
+
+                    self.gcoder.calcEValue(rs.Distance(endPoint, startPoint))
+                    tmpText += "G1 X{0} Y{1} Z{2} E{3} F{4}\n".format(startPoint[0], startPoint[1], startPoint[2], self.gcoder.getEValue(), 1800)
+
+                    prePoint = startPoint
+
+                    flag = True
+
 
                 self.gcoder.addGcode(tmpText)
 
@@ -817,6 +1006,7 @@ class AAM_Planar():
     def clean(self):
 
         rs.DeleteObject(self.sliceSurface)
+        rs.DeleteObject(self.addtiveObj)
         return
 
     #setter orgnizer
@@ -969,9 +1159,11 @@ class gcodeGenerater():
 
         self.EValue = 0
 
+        self.f = None
 
 
-    def initGcode(self):
+
+    def initGcode(self, fileN):
         self.textGcode = ""
 
         self.textGcode += "G90\n" # set to absolute positioning
@@ -984,22 +1176,31 @@ class gcodeGenerater():
         self.textGcode += "G92 E0\n" # set position: E -> new extruder position
         self.textGcode += "G1 E-1.0000 F1800\n" # retract
 
+        self.f = open(fileN, "w")
+        self.f.writelines(self.textGcode)
+
     def addGcode(self, code):
-        self.textGcode += code
+        #self.textGcode += code
+        self.f.writelines(code)
 
     def finishGcode(self):
-        self.textGcode += "G92 E0\n"
+        self.textGcode = "G92 E0\n"
         self.textGcode += "G1 E-1.0000 F18000\n"
         self.textGcode += "M104 S0\n"
         self.textGcode += "M140 S0\n"
         self.textGcode += "G28\n"
         self.textGcode += "M84\n"
 
-    def outputFile(self, fileN):
+        self.f.writelines(self.textGcode)
+
+    def outputFile(self):
+        '''
         with open(fileN, "w") as f:
             f.writelines(self.textGcode)
             f.close()
+        '''
 
+        self.f.close()
         print("Successfly gcode file is output")
 
 
@@ -1088,11 +1289,10 @@ def main():
     aam = AAM_Planar(gcoder)
     aam.main()
 
-
+'''
 def RunCommand(is_interactive):
     main()
 
 '''
 if __name__ == "__main__":
     main()
-'''

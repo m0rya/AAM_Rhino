@@ -139,7 +139,8 @@ class AAM_Planar():
         for i in explodedSurfaces:
             tmp = rs.SurfaceEditPoints(i)
             for j in tmp:
-                editPoint.append(j)
+                if rs.IsPointOnSurface(i, j)
+                    editPoint.append(j)
 
         rs.CullDuplicatePoints(editPoint)
 
