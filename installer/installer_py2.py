@@ -52,6 +52,8 @@ def main():
 
 
     subprocess.call(['cp', "../src/AAM_Planar_cmd.py", locate + 'PythonPlugins/' + pluginFolderName + '/dev/'])
+    subprocess.call(['cp', "../src/AAM_CurvedSurface_cmd.py", locate + 'PythonPlugins/' + pluginFolderName + '/dev/'])
+
 
 
     print "successfuly AAM Plugins is installed"

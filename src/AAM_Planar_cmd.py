@@ -1289,10 +1289,10 @@ def main():
     aam = AAM_Planar(gcoder)
     aam.main()
 
-'''
 def RunCommand(is_interactive):
     main()
 
 '''
 if __name__ == "__main__":
     main()
+'''
