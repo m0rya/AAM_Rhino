@@ -42,6 +42,9 @@ class AAM_CurvedSurface():
         print('setPlanarBaseSurface done')
 
 
+        self.setPrintingSetting()
+
+
 
         fileN = rs.SaveFileName("Output file", "G-Code Files (*.gcode)|*.gcode|All Files (*.*)|*.*|")
         self.gcoder.initGcode(fileN)
@@ -242,7 +245,14 @@ class AAM_CurvedSurface():
                             print('travelStartPoint is None')
                         if currentPoint is None:
                             print('currentPoint is None')
-                        self.travel(self.travelStartPoint, currentPoint, sliceSurface)
+                        travelResult = self.travel(self.travelStartPoint, currentPoint, sliceSurface)
+
+                        if travelResult is False:
+                            tmpText = "G92 E0\nG1 E-2 F3600\n"
+                            tmpText += "G1 Z{0}\n".format(currentPoint[2] + 10)
+                            tmpText += "G1 X{0} Y{1} Z{2}\n".format(currentPoint[0], currentPoint[1], currentPoint[2])
+                            tmpText += "G1 E0\n"
+                            self.gcoder.addGcode(tmpText)
 
                         flag = False
 
@@ -291,7 +301,9 @@ class AAM_CurvedSurface():
 
 
 
-            rs.DeleteObjects(intersectedLines)
+            ##for zuhan
+            #rs.DeleteObjects(intersectedLines)
+
             rs.DeleteObjects(openCurves)
 
 
@@ -324,7 +336,7 @@ class AAM_CurvedSurface():
         except:
             print('In Trave, convertCurveToPolyline failed')
             print(projectedTravelLine)
-            return
+            return False
 
         travelVertices = rs.CurveEditPoints(convertedTravelPolyline)
         rs.DeleteObject(convertedTravelPolyline)
@@ -374,6 +386,7 @@ class AAM_CurvedSurface():
         try:
             rs.IsCurve(curve)
         except:
+            ##Debug needs
             print('IsCurve failed')
             print(curve)
             return resultLines
@@ -381,6 +394,7 @@ class AAM_CurvedSurface():
         try:
             rs.IsCurve(cutter)
         except:
+            ##Debug needs
             print('IsCurve failed')
             print(cutter)
             return resultLines
@@ -582,11 +596,36 @@ class AAM_CurvedSurface():
                 else:
                     self.travelStartPoint = currentPoint
 
-            if trimedLine is not None:
-                rs.DeleteObjects(trimedLine)
+            #bug
+            if layerIndex != 0:
+                if trimedLine is not None:
+                    rs.DeleteObjects(trimedLine)
+
+
 
         rs.DeleteObject(sliceSurface)
         return
+
+
+    def setPrintingSetting(self):
+        self.setExtruderDiameter()
+        self.setFilamentDiameter()
+        self.setExtrudeTemperture()
+
+        self.setLayerHeight()
+
+
+    def setExtruderDiameter(self):
+        self.gcoder.setExtruderDiameter(rs.GetReal("Extruder Diameter", 0.4))
+
+    def setFilamentDiameter(self):
+        self.gcoder.setFilamentDiameter(rs.GetReal("Filament Diameter", 1.75))
+
+    def setExtrudeTemperture(self):
+        self.gcoder.setExtrudeTemperture(rs.GetReal("Extrude Temperture", 195))
+
+    def setLayerHeight(self):
+        self.gcoder.setLayerHeight(rs.GetReal("Layer Height", 0.15))
 
 
 
@@ -600,8 +639,10 @@ class gcodeGenerater():
 
         self.fileName = "testGcode.gcode"
         self.textGcode = ""
+        ##for zuhan
+        #self.layerHeight = 0.15
+        self.layerHeight = 0.8
 
-        self.layerHeight = 0.15
         self.extruderDiameter = 0.4
         self.filamentDiameter = 1.75
         self.extrudeTemperture = 195
@@ -613,7 +654,7 @@ class gcodeGenerater():
 
         self.EValue = 0
 
-        self.retractionDistance = -1.0
+        self.retractionDistance = -3.0
 
         self.f = None
 
@@ -741,18 +782,19 @@ class gcodeGenerater():
         return self.retractionDistance
 
 
-
+'''
 def main():
     gcoder = gcodeGenerater()
 
     aam = AAM_CurvedSurface(gcoder)
 
     aam.main()
+'''
 
 def RunCommand(is_interactive):
     main()
 
-'''
+
+
 if __name__ == "__main__":
     main()
-'''
