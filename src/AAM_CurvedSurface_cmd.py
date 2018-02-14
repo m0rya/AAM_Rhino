@@ -782,19 +782,20 @@ class gcodeGenerater():
         return self.retractionDistance
 
 
-'''
+
 def main():
     gcoder = gcodeGenerater()
 
     aam = AAM_CurvedSurface(gcoder)
 
     aam.main()
-'''
+
 
 def RunCommand(is_interactive):
     main()
 
 
-
+'''
 if __name__ == "__main__":
     main()
+'''
